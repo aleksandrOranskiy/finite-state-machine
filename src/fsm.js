@@ -20,6 +20,9 @@ class FSM {
         this.stackStates = new Array();
         this.stackStates.push(this.config.initial);
         this.undoCallCount = 0;
+        this.isUndoActive = false;
+        this.isRedoActive = false;
+        this.stackOperations = new Array();
     }
 
     /**
@@ -35,16 +38,23 @@ class FSM {
      * Goes to specified state.
      * @param state
      */
-    changeState(state) {
+    changeState(state) { // stackOperations = 0
 
         var isChange = false;
         for (var key in this.config.states) {
             if (key === state) {
-                if (this.activeState !== state) {
-                    this.stackStates.push(state);
-                }
+                
+                this.stackStates.push(state);
                 this.activeState = state;
                 isChange = true;
+                if (this.isUndoActive) {
+                    this.isUndoActive = false;
+                    this.stackOperations.push(1);
+                } else if (this.isRedoActive) {
+                    this.isRedoActive = false;
+                } else {
+                    this.stackOperations.push(0);
+                }
             }
         }
 
@@ -58,7 +68,7 @@ class FSM {
      * Changes state according to event transition rules.
      * @param event
      */
-    trigger(event) {
+    trigger(event) { // stackOperations = 0
 
         var isChange = false;
         for (var key in this.config.states[this.activeState].transitions) {
@@ -76,9 +86,10 @@ class FSM {
     /**
      * Resets FSM state to initial.
      */
-    reset() {
+    reset() { // stackOperations = 2
 
         this.activeState = this.config.initial;
+        this.stackOperations.push(2);
     }
 
     /**
@@ -120,13 +131,14 @@ class FSM {
      * Returns false if undo is not available.
      * @returns {Boolean}
      */
-    undo() {
+    undo() { // stackOperations = 1
 
-        if (this.stackStates.length !== 1) {
+        if (((this.stackStates.length - this.undoCallCount * 2) !== 1) && (this.stackStates.length !== 0)) {
 
-            this.stackStates.pop();
-            this.changeState(this.stackStates.pop());
+            this.isUndoActive = true;
+            this.changeState(this.stackStates[this.stackStates.length-2]);
             ++this.undoCallCount;
+
             return true;
 
         } else {
@@ -142,10 +154,16 @@ class FSM {
      */
     redo() {
 
-        if (this.stackStates.length !== 1) {
+        if ((this.stackStates.length !== 1) && (this.stackOperations[this.stackOperations.length-1] !== 0)) {
 
-            this.stackStates.pop();
-            this.changeState(this.stackStates.pop());
+            this.isRedoActive = true;
+            if (this.stackOperations[this.stackOperations.length-1] === 1) {
+                this.stackOperations.pop();
+                this.changeState(this.stackStates[this.stackStates.length-2]);
+            } else {
+                this.changeState(this.stackStates[this.stackStates.length-2]);
+            }
+
             return true;
 
         } else {
@@ -157,44 +175,11 @@ class FSM {
     /**
      * Clears transition history
      */
-    clearHistory() {}
-}
+    clearHistory() {
 
-const config = {
-    initial: 'normal',
-    states: {
-        normal: {
-            transitions: {
-                study: 'busy',
-            }
-        },
-        busy: {
-            transitions: {
-                get_tired: 'sleeping',
-                get_hungry: 'hungry',
-            }
-        },
-        hungry: {
-            transitions: {
-                eat: 'normal'
-            },
-        },
-        sleeping: {
-            transitions: {
-                get_hungry: 'hungry',
-                get_up: 'normal',
-            },
-        },
+        this.stackStates.length = 1;
     }
-};
-
-
-const student = new FSM(config);
-
-student.trigger('study');
-console.log(student.stackStates);
-student.undo();
-console.log(student.undo());//.to.be.false;
+}
 
 module.exports = FSM;
 
